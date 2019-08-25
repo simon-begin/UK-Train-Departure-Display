@@ -1,4 +1,6 @@
 import os
+# Hello
+
 import sys
 import time
 import json
@@ -270,6 +272,7 @@ try:
     regulator = framerate_regulator(fps=10)
 
     data = loadData(config["transportApi"], config["journey"])
+    print(data)
     if data[0] == False:
         virtual = drawBlankSignage(
             device, width=widgetWidth, height=widgetHeight, departureStation=data[2])
@@ -294,6 +297,7 @@ try:
                 timeAtStart = time.time()
 
             timeNow = time.time()
+            print('display refreshed')
             virtual.refresh()
 
 except KeyboardInterrupt:

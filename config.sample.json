@@ -11,5 +11,9 @@
     "appId": "",
     "apiKey": "",
     "operatingHours": "0-23"
+  },
+  "stmApi": {
+    "appId": "",
+    "apiKey": ""
   }
 }

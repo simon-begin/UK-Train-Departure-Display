@@ -2,6 +2,9 @@ import os
 import requests
 import json
 
+from fixture import destinations_for_station_fixture, destinations_for_departure_fixture
+
+
 def abbrStation(journeyConfig, inputStr):
     dict = journeyConfig['stationAbbr']
     for key in dict.keys():
@@ -19,15 +22,7 @@ def loadDeparturesForStation(journeyConfig, appId, apiKey):
 
     departureStation = journeyConfig["departureStation"]
 
-    URL = f"http://transportapi.com/v3/uk/train/station/{departureStation}/live.json"
-
-    PARAMS = {'app_id': appId,
-              'app_key': apiKey,
-              'calling_at': journeyConfig["destinationStation"]}
-
-    r = requests.get(url=URL, params=PARAMS)
-
-    data = r.json()
+    data = destinations_for_station_fixture
     #apply abbreviations / replacements to station names (long stations names dont look great on layout)
     #see config file for replacement list
     for item in data["departures"]["all"]:
@@ -41,9 +36,8 @@ def loadDeparturesForStation(journeyConfig, appId, apiKey):
 
 
 def loadDestinationsForDeparture(journeyConfig, timetableUrl):
-    r = requests.get(url=timetableUrl)
 
-    data = r.json()
+    data = destinations_for_departure_fixture
 
     #apply abbreviations / replacements to station names (long stations names dont look great on layout)
     #see config file for replacement list
