@@ -1,31 +1,26 @@
-import os
-# Hello
-
-import sys
-import time
 import json
-
-from datetime import timedelta
-from timeloop import Timeloop
+import os
+import time
 from datetime import datetime
-from PIL import ImageFont, Image
 
-from trains import loadDeparturesForStation, loadDestinationsForDeparture
-
+from PIL import ImageFont
 from luma.core.interface.serial import spi
 from luma.core.render import canvas
-from luma.oled.device import ssd1322
-from luma.core.virtual import viewport, snapshot
 from luma.core.sprite_system import framerate_regulator
+from luma.core.virtual import viewport, snapshot
+from luma.oled.device import ssd1322
 
-from open import isRun
+from open import is_run
+from trains import load_departures_for_station, load_destinations_for_departure
 
-def loadConfig():
-    with open('config.json', 'r') as jsonConfig:
-        data = json.load(jsonConfig)
+
+def load_config():
+    with open('config.json', 'r') as json_config:
+        data = json.load(json_config)
         return data
 
-def makeFont(name, size):
+
+def make_font(name, size):
     font_path = os.path.abspath(
         os.path.join(
             os.path.dirname(__file__),
@@ -36,267 +31,270 @@ def makeFont(name, size):
     return ImageFont.truetype(font_path, size)
 
 
-def renderDestination(departure, font):
-    departureTime = departure["aimed_departure_time"]
-    destinationName = departure["destination_name"]
+def render_destination(departure, font):
+    departure_time = departure["aimed_departure_time"]
+    destination_name = departure["destination_name"]
 
-    def drawText(draw, width, height):
-        train = f"{departureTime}  {destinationName}"
+    def draw_text(draw, width, height):
+        train = f"{departure_time}  {destination_name}"
         draw.text((0, 0), text=train, font=font, fill="yellow")
 
-    return drawText
+    return draw_text
 
 
-def renderServiceStatus(departure):
-    def drawText(draw, width, height):
+def render_service_status(departure):
+    def draw_text(draw, width, height):
         train = ""
 
         if isinstance(departure["expected_departure_time"], str):
-            train = 'Exp '+departure["expected_departure_time"]
+            train = 'Exp ' + departure["expected_departure_time"]
 
         if departure["aimed_departure_time"] == departure["expected_departure_time"]:
             train = "On time"
 
         w, h = draw.textsize(train, font)
-        draw.text((width-w,0), text=train, font=font, fill="yellow")
-    return drawText
+        draw.text((width - w, 0), text=train, font=font, fill="yellow")
+
+    return draw_text
 
 
-def renderPlatform(departure):
-    def drawText(draw, width, height):
+def render_platform(departure):
+    def draw_text(draw, width, height):
         if isinstance(departure["platform"], str):
-            draw.text((0, 0), text="Plat "+departure["platform"], font=font, fill="yellow")
-    return drawText
+            draw.text((0, 0), text="Plat " + departure["platform"], font=font, fill="yellow")
+
+    return draw_text
 
 
-def renderCallingAt(draw, width, height):
+def render_calling_at(draw, width, height):
     stations = "Calling at:"
     draw.text((0, 0), text=stations, font=font, fill="yellow")
 
 
-def renderStations(stations):
-    def drawText(draw, width, height):
-        global stationRenderCount, pauseCount
+def render_stations(stations):
+    def draw_text(draw, width, height):
+        global station_render_count, pause_count
 
-        if(len(stations) == stationRenderCount - 5):
-            stationRenderCount = 0
+        if len(stations) == station_render_count - 5:
+            station_render_count = 0
 
         draw.text(
-            (0, 0), text=stations[stationRenderCount:], width=width, font=font, fill="yellow")
+            (0, 0), text=stations[station_render_count:], width=width, font=font, fill="yellow")
 
-        if stationRenderCount == 0 and pauseCount < 8:
-            pauseCount += 1
-            stationRenderCount = 0
+        if station_render_count == 0 and pause_count < 8:
+            pause_count += 1
+            station_render_count = 0
         else:
-            pauseCount = 0
-            stationRenderCount += 1
+            pause_count = 0
+            station_render_count += 1
 
-    return drawText
+    return draw_text
 
-def renderTime(draw, width, height):
-    rawTime = datetime.now().time()
-    hour, minute, second = str(rawTime).split('.')[0].split(':')
 
-    w1, h1 = draw.textsize("{}:{}".format(hour, minute), fontBoldLarge)
-    w2, h2 = draw.textsize(":00", fontBoldTall)
+def render_time(draw, width, height):
+    raw_time = datetime.now().time()
+    hour, minute, second = str(raw_time).split('.')[0].split(':')
+
+    w1, h1 = draw.textsize("{}:{}".format(hour, minute), font_bold_large)
+    w2, h2 = draw.textsize(":00", font_bold_tall)
 
     draw.text(((width - w1 - w2) / 2, 0), text="{}:{}".format(hour, minute),
-              font=fontBoldLarge, fill="yellow")
+              font=font_bold_large, fill="yellow")
     draw.text((((width - w1 - w2) / 2) + w1, 5), text=":{}".format(second),
-              font=fontBoldTall, fill="yellow")
+              font=font_bold_tall, fill="yellow")
 
 
-def renderWelcomeTo(xOffset):
-    def drawText(draw, width, height):
+def render_welcome_to(x_offset):
+    def draw_text(draw, width, height):
         text = "Welcome to"
-        draw.text((int(xOffset), 0), text=text, font=fontBold, fill="yellow")
+        draw.text((int(x_offset), 0), text=text, font=font_bold, fill="yellow")
 
-    return drawText
+    return draw_text
 
 
-def renderDepartureStation(departureStation, xOffset):
+def render_departure_station(departure_station, x_offset):
     def draw(draw, width, height):
-        text = departureStation
-        draw.text((int(xOffset), 0), text=text, font=fontBold, fill="yellow")
+        text = departure_station
+        draw.text((int(x_offset), 0), text=text, font=font_bold, fill="yellow")
 
     return draw
 
 
-def renderDots(draw, width, height):
+def render_dots(draw, width, height):
     text = ".  .  ."
-    draw.text((0, 0), text=text, font=fontBold, fill="yellow")
+    draw.text((0, 0), text=text, font=font_bold, fill="yellow")
 
 
-def loadData(apiConfig, journeyConfig):
-    runHours = [int(x) for x in apiConfig['operatingHours'].split('-')]
-    if isRun(runHours[0], runHours[1]) == False:
-        return False, False, journeyConfig['outOfHoursName']
+def load_data(api_config, journey_config):
+    run_hours = [int(x) for x in api_config['operatingHours'].split('-')]
+    if not is_run(run_hours[0], run_hours[1]):
+        return False, False, journey_config['outOfHoursName']
 
-    departures, stationName = loadDeparturesForStation(
-        journeyConfig, apiConfig["appId"], apiConfig["apiKey"])
+    departures, station_name = load_departures_for_station(
+        journey_config, api_config["appId"], api_config["apiKey"])
 
     if len(departures) == 0:
-        return False, False, stationName
+        return False, False, station_name
 
-    firstDepartureDestinations = loadDestinationsForDeparture(
-        journeyConfig, departures[0]["service_timetable"]["id"])
+    first_departure_destinations = load_destinations_for_departure(
+        journey_config, departures[0]["service_timetable"]["id"])
 
-    return departures, firstDepartureDestinations, stationName
+    return departures, first_departure_destinations, station_name
 
 
-def drawBlankSignage(device, width, height, departureStation):
-    global stationRenderCount, pauseCount
-
-    with canvas(device) as draw:
-        welcomeSize = draw.textsize("Welcome to", fontBold)
+def draw_blank_signage(device, width, height, departure_station):
+    global station_render_count, pause_count
 
     with canvas(device) as draw:
-        stationSize = draw.textsize(departureStation, fontBold)
+        welcome_size = draw.textsize("Welcome to", font_bold)
+
+    with canvas(device) as draw:
+        station_size = draw.textsize(departure_station, font_bold)
 
     device.clear()
 
-    virtualViewport = viewport(device, width=width, height=height)
+    virtual_viewport = viewport(device, width=width, height=height)
 
-    rowOne = snapshot(width, 10, renderWelcomeTo(
-        (width - welcomeSize[0]) / 2), interval=10)
-    rowTwo = snapshot(width, 10, renderDepartureStation(
-        departureStation, (width - stationSize[0]) / 2), interval=10)
-    rowThree = snapshot(width, 10, renderDots, interval=10)
-    rowTime = snapshot(width, 14, renderTime, interval=1)
+    row_one = snapshot(width, 10, render_welcome_to(
+        (width - welcome_size[0]) / 2), interval=10)
+    row_two = snapshot(width, 10, render_departure_station(
+        departure_station, (width - station_size[0]) / 2), interval=10)
+    row_three = snapshot(width, 10, render_dots, interval=10)
+    row_time = snapshot(width, 14, render_time, interval=1)
 
-    if len(virtualViewport._hotspots) > 0:
-        for hotspot, xy in virtualViewport._hotspots:
-            virtualViewport.remove_hotspot(hotspot, xy)
+    if len(virtual_viewport._hotspots) > 0:
+        for hotspot, xy in virtual_viewport._hotspots:
+            virtual_viewport.remove_hotspot(hotspot, xy)
 
-    virtualViewport.add_hotspot(rowOne, (0, 0))
-    virtualViewport.add_hotspot(rowTwo, (0, 12))
-    virtualViewport.add_hotspot(rowThree, (0, 24))
-    virtualViewport.add_hotspot(rowTime, (0, 50))
+    virtual_viewport.add_hotspot(row_one, (0, 0))
+    virtual_viewport.add_hotspot(row_two, (0, 12))
+    virtual_viewport.add_hotspot(row_three, (0, 24))
+    virtual_viewport.add_hotspot(row_time, (0, 50))
 
-    return virtualViewport
+    return virtual_viewport
 
 
-def drawSignage(device, width, height, data):
-    global stationRenderCount, pauseCount
+def draw_signage(device, width, height, data):
+    global station_render_count, pause_count
 
     device.clear()
 
-    virtualViewport = viewport(device, width=width, height=height)
+    virtual_viewport = viewport(device, width=width, height=height)
 
     status = "Exp 00:00"
-    callingAt = "Calling at:"
+    calling_at = "Calling at:"
 
-    departures, firstDepartureDestinations, departureStation = data
+    departures, first_departure_destinations, departure_station = data
 
     with canvas(device) as draw:
-        w, h = draw.textsize(callingAt, font)
+        w, h = draw.textsize(calling_at, font)
 
-    callingWidth = w
-    width = virtualViewport.width
+    calling_width = w
+    width = virtual_viewport.width
 
-    # First measure the text size
+    # _first measure the text size
     with canvas(device) as draw:
         w, h = draw.textsize(status, font)
         pw, ph = draw.textsize("Plat 88", font)
 
-    rowOneA = snapshot(
-        width - w - pw - 5, 10, renderDestination(departures[0], fontBold), interval=10)
-    rowOneB = snapshot(w, 10, renderServiceStatus(
+    row_one_a = snapshot(
+        width - w - pw - 5, 10, render_destination(departures[0], font_bold), interval=10)
+    row_one_b = snapshot(w, 10, render_service_status(
         departures[0]), interval=1)
-    rowOneC = snapshot(pw, 10, renderPlatform(departures[0]), interval=10)
-    rowTwoA = snapshot(callingWidth, 10, renderCallingAt, interval=100)
-    rowTwoB = snapshot(width - callingWidth, 10,
-                       renderStations(", ".join(firstDepartureDestinations)), interval=0.1)
+    row_one_c = snapshot(pw, 10, render_platform(departures[0]), interval=10)
+    row_two_a = snapshot(calling_width, 10, render_calling_at, interval=100)
+    row_two_b = snapshot(width - calling_width, 10,
+                         render_stations(", ".join(first_departure_destinations)), interval=0.1)
 
-    if(len(departures) > 1):
-        rowThreeA = snapshot(width - w - pw, 10, renderDestination(
+    if len(departures) > 1:
+        row_three_a = snapshot(width - w - pw, 10, render_destination(
             departures[1], font), interval=10)
-        rowThreeB = snapshot(w, 10, renderServiceStatus(
+        row_three_b = snapshot(w, 10, render_service_status(
             departures[1]), interval=1)
-        rowThreeC = snapshot(pw, 10, renderPlatform(departures[1]), interval=10)
+        row_three_c = snapshot(pw, 10, render_platform(departures[1]), interval=10)
 
-    if(len(departures) > 2):
-        rowFourA = snapshot(width - w - pw, 10, renderDestination(
+    if len(departures) > 2:
+        row_four_a = snapshot(width - w - pw, 10, render_destination(
             departures[2], font), interval=10)
-        rowFourB = snapshot(w, 10, renderServiceStatus(
+        row_four_b = snapshot(w, 10, render_service_status(
             departures[2]), interval=1)
-        rowFourC = snapshot(pw, 10, renderPlatform(departures[2]), interval=10)
+        row_four_c = snapshot(pw, 10, render_platform(departures[2]), interval=10)
 
-    rowTime = snapshot(width, 14, renderTime, interval=0.1)
+    row_time = snapshot(width, 14, render_time, interval=0.1)
 
-    if len(virtualViewport._hotspots) > 0:
-        for hotspot, xy in virtualViewport._hotspots:
-            virtualViewport.remove_hotspot(hotspot, xy)
+    if len(virtual_viewport._hotspots) > 0:
+        for hotspot, xy in virtual_viewport._hotspots:
+            virtual_viewport.remove_hotspot(hotspot, xy)
 
-    stationRenderCount = 0
-    pauseCount = 0
+    station_render_count = 0
+    pause_count = 0
 
-    virtualViewport.add_hotspot(rowOneA, (0, 0))
-    virtualViewport.add_hotspot(rowOneB, (width - w, 0))
-    virtualViewport.add_hotspot(rowOneC, (width - w - pw, 0))
-    virtualViewport.add_hotspot(rowTwoA, (0, 12))
-    virtualViewport.add_hotspot(rowTwoB, (callingWidth, 12))
+    virtual_viewport.add_hotspot(row_one_a, (0, 0))
+    virtual_viewport.add_hotspot(row_one_b, (width - w, 0))
+    virtual_viewport.add_hotspot(row_one_c, (width - w - pw, 0))
+    virtual_viewport.add_hotspot(row_two_a, (0, 12))
+    virtual_viewport.add_hotspot(row_two_b, (calling_width, 12))
 
-    if(len(departures) > 1):
-        virtualViewport.add_hotspot(rowThreeA, (0, 24))
-        virtualViewport.add_hotspot(rowThreeB, (width - w, 24))
-        virtualViewport.add_hotspot(rowThreeC, (width - w - pw, 24))
+    if len(departures) > 1:
+        virtual_viewport.add_hotspot(row_three_a, (0, 24))
+        virtual_viewport.add_hotspot(row_three_b, (width - w, 24))
+        virtual_viewport.add_hotspot(row_three_c, (width - w - pw, 24))
 
-    if(len(departures) > 2):
-        virtualViewport.add_hotspot(rowFourA, (0, 36))
-        virtualViewport.add_hotspot(rowFourB, (width - w, 36))
-        virtualViewport.add_hotspot(rowFourC, (width - w - pw, 36))
+    if len(departures) > 2:
+        virtual_viewport.add_hotspot(row_four_a, (0, 36))
+        virtual_viewport.add_hotspot(row_four_b, (width - w, 36))
+        virtual_viewport.add_hotspot(row_four_c, (width - w - pw, 36))
 
-    virtualViewport.add_hotspot(rowTime, (0, 50))
+    virtual_viewport.add_hotspot(row_time, (0, 50))
 
-    return virtualViewport
+    return virtual_viewport
 
 
 try:
-    config = loadConfig()
+    config = load_config()
 
     serial = spi()
     device = ssd1322(serial, mode="1", rotate=2)
-    font = makeFont("Dot Matrix Regular.ttf", 10)
-    fontBold = makeFont("Dot Matrix Bold.ttf", 10)
-    fontBoldTall = makeFont("Dot Matrix Bold Tall.ttf", 10)
-    fontBoldLarge = makeFont("Dot Matrix Bold.ttf", 20)
+    font = make_font("Dot Matrix Regular.ttf", 10)
+    font_bold = make_font("Dot Matrix Bold.ttf", 10)
+    font_bold_tall = make_font("Dot Matrix Bold Tall.ttf", 10)
+    font_bold_large = make_font("Dot Matrix Bold.ttf", 20)
 
-    widgetWidth = 256
-    widgetHeight = 64
+    widget_width = 256
+    widget_height = 64
 
-    stationRenderCount = 0
-    pauseCount = 0
+    station_render_count = 0
+    pause_count = 0
     loop_count = 0
 
     regulator = framerate_regulator(fps=10)
 
-    data = loadData(config["transportApi"], config["journey"])
-    print(data)
-    if data[0] == False:
-        virtual = drawBlankSignage(
-            device, width=widgetWidth, height=widgetHeight, departureStation=data[2])
-    else:
-        virtual = drawSignage(device, width=widgetWidth,
-                              height=widgetHeight, data=data)
+    data = load_data(config["transportApi"], config["journey"])
 
-    timeAtStart = time.time()
-    timeNow = time.time()
+    if not data[0]:
+        virtual = draw_blank_signage(
+            device, width=widget_width, height=widget_height, departure_station=data[2])
+    else:
+        virtual = draw_signage(device, width=widget_width,
+                               height=widget_height, data=data)
+
+    time_at_start = time.time()
+    time_now = time.time()
 
     while True:
         with regulator:
-            if(timeNow - timeAtStart >= config["refreshTime"]):
-                data = loadData(config["transportApi"], config["journey"])
-                if data[0] == False:
-                    virtual = drawBlankSignage(
-                        device, width=widgetWidth, height=widgetHeight, departureStation=data[2])
+            if time_now - time_at_start >= config["refreshTime"]:
+                data = load_data(config["transportApi"], config["journey"])
+                if not data[0]:
+                    virtual = draw_blank_signage(
+                        device, width=widget_width, height=widget_height, departure_station=data[2])
                 else:
-                    virtual = drawSignage(device, width=widgetWidth,
-                                          height=widgetHeight, data=data)
+                    virtual = draw_signage(device, width=widget_width,
+                                           height=widget_height, data=data)
 
-                timeAtStart = time.time()
+                time_at_start = time.time()
 
-            timeNow = time.time()
+            time_now = time.time()
             print('display refreshed')
             virtual.refresh()
 

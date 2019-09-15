@@ -1,0 +1,2 @@
+class DDPiException(Exception):
+   pass
